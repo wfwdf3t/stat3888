@@ -1,0 +1,433 @@
+---
+title: "SVM_ASSIGNMENT"
+output: html_document
+date: '2022-10-11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(warn=-1) 
+
+library <- function(...) {
+  suppressPackageStartupMessages(base::library(...))
+}
+
+library(here)
+library(tidyverse)     
+library(ggplot2)      
+library(dplyr)
+library(corrplot)
+library(caret)
+library(corrr)
+library(kernlab)  
+library(e1071)    
+library(DT)
+```
+
+
+# Initial Data Exploration
+
+# load the data
+```{r, results='hide', message=FALSE, warning=FALSE}
+data <- load("tech_data.Rdata")
+data
+```
+
+```{r}
+types_biom
+```
+
+
+```{r}
+summary(tech_biom$DIABBC)
+```
+
+
+```{r}
+df = merge(tech_biom, tech_nutr, by="ABSPID", all.y=TRUE)
+```
+
+
+```{r}
+df <- df[!apply(is.na(df) | df == "", 1, all),]
+unique(df) 
+```
+
+```{r}
+summary(df)
+```
+
+```{r}
+ggplot(data = df, aes(x = DIABBC, fill = FATT1)) +
+  geom_bar()
+```
+
+
+
+```{r}
+magic_vals <- c(999, 9999, 9996)
+# df[df%in%magic_vals] <- NA 
+df[df$EXLWMBC%in%magic_vals, ] <- NA 
+df[df$EXLWTBC%in%magic_vals, ] <- NA 
+df
+```
+
+
+
+```{r}
+df %>% drop_na(FATPER1)
+df %>% drop_na(FATPER2)
+```
+
+
+```{r}
+df %>% drop_na(CHOPER1)
+df %>% drop_na(CHOPER2)
+df %>% drop_na(ABSPID)
+```
+
+```{r}
+da <- subset(df, select = c(-ABSPID))
+da %>% drop_na(DIABBC)
+```
+
+```{r}
+da1 <- da[da$DIABBC != "5", ]
+da1 %>% drop_na(DIABBC)
+```
+
+```{r}
+library(dplyr)
+da1 = filter(da, DIABBC != "5")
+da1
+```
+
+
+
+```{r}
+summary(da1$DIABBC)
+plot(da1$DIABBC)
+levels(da1$DIABBC) <- c("1", "3")
+```
+
+```{r}
+set.seed(123)
+ind.train <- createDataPartition(da1$DIABBC, p=0.8, list=FALSE)
+df_data_train <- na.omit(da1[ind.train,])
+df_data_test <- na.omit(da1[-ind.train,])
+tune.o <- tune(svm,  DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2, data = df_data_train,  kernel = "polynomial", ranges = list(cost = cost_range))
+bestmod_polynomial <- tune.o$best.model
+summary(bestmod_polynomial)
+```
+
+```{r}
+p1 <- ggplot() + 
+  geom_point(data=df_data_train, aes(x=CHOPER1, y=FATPER1, color=DIABBC), alpha=0.1, size=4) +
+  geom_point(data=df_data_train, aes(x=CHOPER1, y=FATPER1, color=DIABBC, shape=DIABBC, size=4), alpha=0.5) +
+  scale_color_brewer("", palette="Dark2") + 
+  theme_bw() + theme(aspect.ratio=1, legend.position="none") + 
+  ggtitle("Polynomial kernel") +
+  labs(y = "Fat (% of daily energy)", x = "Carbohydrates (% of daily energy)")
+p1
+```
+```{r}
+p1 <- ggplot() + 
+  geom_point(data=df_data_train, aes(x=CHOPER2, y=FATPER2, color=DIABBC), alpha=0.1, size=4) +
+  geom_point(data=df_data_train, aes(x=CHOPER2, y=FATPER2, color=DIABBC, shape=DIABBC, size=4), alpha=0.5) +
+  scale_color_brewer("", palette="Dark2") + 
+  theme_bw() + theme(aspect.ratio=1, legend.position="none") + 
+  ggtitle("Polynomial kernel") +
+  labs(y = "Fat (% of daily energy)", x = "Carbohydrates (% of daily energy)")
+p1
+```
+
+
+```{r}
+levels(da1$DIABBC) <- c("Current", "Non-Current")
+```
+
+```{r}
+plot(x = da$FATPER1, y = da$CHOPER1, col=da$DIABBC)
+```
+
+```{r}
+da <- subset(da, select = -c(SMSBC_MISS, FEMLSBC_MISS, PHDKGWBC_MISS, PHDCMHBC_MISS, PHDCMWBC_MISS, INCDEC_MISS, ADTOTSE_MISS, BDYMSQ04_MISS, DIASTOL_MISS, DIETQ12_MISS, DIETQ14_MISS, DIETRDI_MISS, SABDYMS_MISS, SLPTIME_MISS, SMKDAILY_MISS, SMKSTAT_MISS,   SYSTOL_MISS, ALTNTR_MISS, ALTRESB_MISS, APOBNTR_MISS, APOBRESB_MISS, B12RESB_MISS, BIORESPC_MISS, CHOLNTR_MISS, CHOLRESB_MISS, CVDMEDST_MISS, DIAHBRSK_MISS, FASTSTAD_MISS, FOLATREB_MISS, GGTNTR_MISS, GGTRESB_MISS, GLUCFPD_MISS, GLUCFREB_MISS, HBA1PREB_MISS, HDLCHREB_MISS, LDLNTR_MISS, LDLRESB_MISS, TRIGNTR_MISS, TRIGRESB_MISS, BMR_MISS, EIBMR1_MISS, EIBMR2_MISS, BMISC_MISS, ABSHID ))
+```
+
+```{r}
+print(class(da))
+```
+
+
+
+
+# Splitting data into testing and training sets
+
+For the purposes of this case study we will splitting data into testing and training sets.
+
+We use stratified sampling technique to split the data. 80% of the data is used to train the model and the rest 20% is used to test the model built.
+
+```{r}
+set.seed(123)
+ind.train <- createDataPartition(da$DIABBC, p=0.8, list=FALSE)
+df_data_train <- na.omit(df[ind.train,])
+df_data_test <- na.omit(df[-ind.train,])
+```
+
+
+
+# Linear SVM
+```{r}
+cost_range <- c(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5)
+
+tune.out <- tune(svm, df_data_train$DIABBC ~ df_data_train$CHOPER1 + df_data_train$CHOPER2 + df_data_train$FATPER1 + df_data_train$FATPER2, data = df_data_train, kernel = "linear", ranges = list(cost=cost_range))
+
+bestmod_linear <- tune.out$best.model
+summary(bestmod_linear)
+```
+
+
+
+```{r}
+plot(tune.out, mode = "pca")
+```
+
+
+
+
+# Model Assessment
+
+```{r}
+fitControl <- trainControl(## 10-fold CV
+                           method = "repeatedcv",
+                           number = 10,
+                           ## repeated ten times
+                           repeats = 10)
+
+
+```
+
+## Model assessment of linear kernel
+
+```{r}
+cost_range <-c(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5)
+
+svm_Linear <-
+  train(
+    DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2,
+    data = df_data_train,
+    method = "svmLinear",
+    trControl = fitControl,
+    preProcess = c("center", "scale"),
+    tuneGrid = expand.grid(C = cost_range)
+  )
+svm_Linear
+```
+
+```{r}
+plot(svm_Linear)
+```
+
+
+
+
+```{r}
+res_Linear <- as_tibble(svm_Linear$results[which.max(svm_Linear$results[,2]),])
+res_Linear
+```
+The choice of 0.001	 provides an Accuracy of 0.8720634
+
+# Polynomial SVM
+
+We try to fit a non-linear boundary between the classes using svm with polynomial kernel
+
+We use tune function which incorporates 10 fold cross validation to give the best cost value and polynomial degree giving least amount of error.
+ 
+
+```{r}
+tune.out2 <- tune(svm,  DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2, data = df_data_train,  kernel = "polynomial", ranges = list(cost = cost_range))
+bestmod_polynomial <- tune.out2$best.model
+summary(bestmod_polynomial)
+```
+
+```{r}
+over = ovun.sample(DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2, data = df_data_train,  method = "over", N = 54808)$data
+
+table(over$)
+```
+
+
+```{r}
+p1 <- ggplot() + 
+  geom_point(data=df_data_train, aes(x=CHOPER1, y=FATPER1, color=DIABBC), alpha=0.1, size=4) +
+  geom_point(data=df_data_train, aes(x=CHOPER1, y=FATPER1, color=DIABBC, shape=DIABBC, size=4), alpha=0.5) +
+  scale_color_brewer("", palette="Dark2") + 
+  theme_bw() + theme(aspect.ratio=1, legend.position="none") + 
+  ggtitle("Polynomial kernel") +
+  labs(y = "Fat (% of daily energy)", x = "Carbohydrates (% of daily energy)")
+p1
+```
+```{r}
+p1 <- ggplot() + 
+  geom_point(data=df_data_train, aes(x=CHOPER2, y=FATPER2, color=DIABBC), alpha=0.1, size=4) +
+  geom_point(data=df_data_train, aes(x=CHOPER2, y=FATPER2, color=DIABBC, shape=DIABBC, size=4), alpha=0.5) +
+  scale_color_brewer("", palette="Dark2") + 
+  theme_bw() + theme(aspect.ratio=1, legend.position="none") + 
+  ggtitle("Polynomial kernel") +
+  labs(y = "Fat (% of daily energy)", x = "Carbohydrates (% of daily energy)")
+p1
+```
+
+
+
+```{r}
+da <- da %>% 
+  filter(!is.na(CHOPER1)) %>% 
+  filter(!is.na(FATPER1))
+library(viridis)
+ggplot(da, 
+       aes(x=CHOPER1, 
+           y=FATPER1, 
+           colour=DIABBC)) + 
+  geom_point(alpha=0.7, 
+             size=3) +
+  scale_colour_viridis() + 
+  geom_vline(xintercept=4.5) + 
+  annotate("segment", 
+           x=4.5, 
+           xend=25, 
+           y=117.5, 
+           yend=117.5) +
+  annotate("segment", 
+           x=4.5, 
+           xend=25, 
+           y=185, 
+           yend=185) +
+  annotate("segment", 
+           x=5.5, 
+           xend=5.5, 
+           y=117.5, 
+           yend=185)
+```
+
+
+
+
+## Model Assessment of Polynomial SVM
+```{r}
+# Fit the model 
+svm_Poly <-
+  train(
+    DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2,
+    data = df_data_train,
+    method = "svmPoly",
+    trControl = fitControl,
+    preProcess = c("center", "scale"),
+    tuneLength = 4
+  )
+# Print the best tuning parameter sigma and C that maximizes model accuracy
+svm_Poly$bestTune
+```
+
+```{r}
+svm_Poly
+```
+
+```{r}
+plot(svm_Poly)
+```
+
+
+
+```{r}
+res_Poly <- as_tibble(svm_Poly$results[which.max(svm_Poly$results[,2]),])
+res_Poly
+```
+
+
+# Radial SVM
+
+We use tune function which incorporates 10 fold cross validation to give the best cost value and gamma value giving least amount of error.
+
+```{r}
+gamma_range = c(0.5,1,2,3,4)
+
+tune.out_radial <- tune(svm,  DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2, data = df_data_train, kernel = "radial", ranges = list(cost = cost_range, gamma = gamma_range))
+bestmod_radial <- tune.out_radial$best.model
+summary(bestmod_radial)
+```
+
+
+```{r}
+plot(tune.out_radial)
+```
+
+# Model Assessment of Radial SVM
+
+```{r}
+fitControl <- trainControl(## 10-fold CV
+                           method = "repeatedcv",
+                           number = 10,
+                           ## repeated ten times
+                           repeats = 10)
+```
+
+```{r}
+svm_Radial <-
+  train(
+    DIABBC ~ CHOPER1 + CHOPER2 + FATPER1 + FATPER2,
+    data = df_data_train,
+    method = "svmRadial",
+    trControl = fitControl,
+    preProcess = c("center", "scale"),
+    tuneLength = 10
+  )
+# Print the best tuning parameter sigma and C that maximizes model accuracy
+svm_Radial$bestTune
+```
+
+
+```{r}
+svm_Radial
+```
+
+
+```{r}
+plot(svm_Radial)
+```
+
+```{r}
+res_Radial<-as_tibble(svm_Radial$results[which.max(svm_Radial$results[,2]),])
+res_Radial
+```
+
+
+```{r}
+df_final <-
+  tibble(
+    Model = c(
+      'SVM Linear',
+      'SVM Radial',
+      'SVM Poly'
+    ),
+    Accuracy = c(res_Linear$Accuracy, res_Radial$Accuracy, res_Poly$Accuracy)
+  )
+df_final %>% arrange(Accuracy)
+```
+
+In these examples, it can be seen that the SVM classifier using non-linear kernels does not necessarily give a better result compared to the linear model.
+
+
+```{r}
+test_pred <- predict(svm_Poly, df_data_test) 
+```
+
+```{r}
+confusionMatrix(table(test_pred, df_data_test$DIABBC))
+```
+
+
+
+
+
